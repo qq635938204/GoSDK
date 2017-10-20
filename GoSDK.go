@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"encoding/hex"
+	"unicode/utf8"
 )
 
 func HttpGet(url string, appkey string, sercret string, apiName string, apiParam string, timeout int) (data string, err error) {
@@ -35,8 +37,8 @@ func HttpGet(url string, appkey string, sercret string, apiName string, apiParam
 }
 
 func HttpPost(urlstr string, appkey string, secret string, apiName string, apiParam string, timeout int) (data string, err error) {
-	temp := fmt.Sprintf("%s/%s", urlstr, apiName)
 	param := makeParam("POST", apiName, apiParam, appkey, secret)
+	temp := fmt.Sprintf("%s/%s", urlstr, apiName)
 	client := &http.Client{
 		Timeout: time.Duration(time.Duration(timeout) * time.Millisecond),
 	}
@@ -74,7 +76,6 @@ makeParam
 func makeParam(method string, apiName string, apiParam string, appKey string, appSercret string) (param string) {
 	var params string
 	var signSrc string
-
 	params = apiParam
 	if len(params) > 0 {
 		params = params + "&"
@@ -107,7 +108,7 @@ func makeParam(method string, apiName string, apiParam string, appKey string, ap
 		strParams = strParams + value + "=" + encodeParamValue(mapParam[value])
 		count++
 	}
-	signSrc = fmt.Sprintf("%s&%s&%s", strings.ToUpper(method), url.QueryEscape(apiName) , url.QueryEscape(strParams))
+	signSrc = fmt.Sprintf("%s&%s&%s", strings.ToUpper(method), url.QueryEscape(apiName), url.QueryEscape(strParams))
 	h := hmac.New(sha1.New, []byte(appSercret))
 	h.Write([]byte(signSrc))
 	encodeString := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s", h.Sum(nil))))
@@ -127,8 +128,7 @@ func makeParam(method string, apiName string, apiParam string, appKey string, ap
 	return strParams
 }
 
-
-func isalpha(c byte) bool {
+func isalpha(c rune) bool {
 	if 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9' {
 		return true
 	}
@@ -144,12 +144,18 @@ encodeParamValue
 *********************************************************************************/
 func encodeParamValue(value string) string {
 	var ret string
-	for _, v := range value {
-		if isalpha(byte(v)) || v == '*' || v == '(' || v == ')' || v== '!' {
-			ret = ret + string(v)
-		} else {
-			ret = ret + "%"
-			ret = ret + (strings.ToUpper(fmt.Sprintf("%x", v)))
+	if utf8.ValidString(value) {
+		text := []rune(value)
+		for _, c := range text {
+			if isalpha(c) || c == '*' || c == '(' || c == ')' || c == '!' {
+				ret += string(c)
+			} else {
+				b := make([]byte, utf8.UTFMax)
+				temp := make([]byte,1)
+				i := utf8.EncodeRune(b,c)
+				temp[0] = b[i-1]
+				ret += "%" + strings.ToUpper(hex.EncodeToString(temp))
+			}
 		}
 	}
 	return ret
